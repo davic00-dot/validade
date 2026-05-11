@@ -472,6 +472,24 @@
   .stat-box .value.warn { color: var(--warn); }
   .stat-box .value.ok { color: var(--accent); }
 
+  .qty-input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    outline: none;
+    text-align: center;
+    -moz-appearance: textfield;
+  }
+  .qty-input::-webkit-outer-spin-button,
+  .qty-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .qty-input:focus { border-color: var(--accent2); }
+
   /* EMPTY STATE */
   .empty {
     text-align: center;
@@ -655,6 +673,11 @@
       </div>
       <div id="eanStatus" style="display:none; margin-top:6px; font-size:12px; padding:8px 10px; border-radius:8px;"></div>
     </div>
+
+    <div class="field">
+      <label>Quantidade <span style="color:var(--muted);font-size:10px;">(opcional)</span></label>
+      <input type="number" id="qtdProduto" placeholder="Ex: 10" min="0" inputmode="numeric" autocomplete="off">
+    </div>
   </div>
 
   <div class="form-card">
@@ -737,7 +760,7 @@
 
   <div class="summary-bar" id="summaryBar">
     <div class="sum-item danger"><div class="num" id="sumVencido">0</div><div class="lbl">Vencidos</div></div>
-    <div class="sum-item warn"><div class="num" id="sumCritico">0</div><div class="lbl">≤7 dias</div></div>
+    <div class="sum-item warn"><div class="num" id="sumCritico">0</div><div class="lbl">≤20 dias</div></div>
     <div class="sum-item ok"><div class="num" id="sumOk">0</div><div class="lbl">Ok</div></div>
   </div>
 
@@ -750,7 +773,7 @@
     <button class="sort-chip" onclick="setSort('nome')" id="sort-nome">A→Z Nome</button>
     <button class="sort-chip active" onclick="setFilter('todos')" id="filter-todos">Todos</button>
     <button class="sort-chip" onclick="setFilter('vencidos')" id="filter-vencidos">🔴 Vencidos</button>
-    <button class="sort-chip" onclick="setFilter('criticos')" id="filter-criticos">🟠 ≤7 dias</button>
+    <button class="sort-chip" onclick="setFilter('criticos')" id="filter-criticos">🟠 ≤20 dias</button>
     <button class="sort-chip" onclick="setFilter('ok')" id="filter-ok">🟢 Ok</button>
   </div>
 
@@ -861,13 +884,13 @@ function formatarData(dateStr) {
 
 function statusClass(dias) {
   if (dias < 0) return 'vencido';
-  if (dias <= 7) return 'critico';
+  if (dias <= 20) return 'critico';
   return 'ok';
 }
 
 function statusColor(dias) {
   if (dias < 0) return 'danger';
-  if (dias <= 7) return 'warn';
+  if (dias <= 20) return 'warn';
   return 'ok';
 }
 
@@ -961,16 +984,18 @@ function adicionarProduto() {
     vencimento = fab.toISOString().split('T')[0];
   }
 
+  const qtd = document.getElementById('qtdProduto').value.trim();
   produtos.push({
     id: gerarId(),
     nome,
     ean: ean || '—',
     vencimento,
+    quantidade: qtd !== '' ? parseInt(qtd) : null,
     selecionado: false
   });
 
   // Limpar
-  ['nomeProduto','codigoEAN','vencDia','vencMes','vencAno','fabDia','fabMes','fabAno','mesesVenc'].forEach(id => {
+  ['nomeProduto','codigoEAN','vencDia','vencMes','vencAno','fabDia','fabMes','fabAno','mesesVenc','qtdProduto'].forEach(id => {
     document.getElementById(id).value = '';
   });
   document.getElementById('previewVencimento').style.display = 'none';
@@ -1019,6 +1044,13 @@ function deletar(id) {
   toast('🗑️ Produto removido');
 }
 
+function atualizarQtd(id, valor) {
+  const p = produtos.find(x => x.id === id);
+  if (!p) return;
+  p.quantidade = valor === '' ? null : parseInt(valor);
+  salvar();
+}
+
 function getVisibleProdutos() {
   const q = document.getElementById('searchInput').value.toLowerCase();
   let lista = [...produtos];
@@ -1030,8 +1062,8 @@ function getVisibleProdutos() {
   }
 
   if (filterMode === 'vencidos') lista = lista.filter(p => diasAte(p.vencimento) < 0);
-  else if (filterMode === 'criticos') lista = lista.filter(p => { const d = diasAte(p.vencimento); return d >= 0 && d <= 7; });
-  else if (filterMode === 'ok') lista = lista.filter(p => diasAte(p.vencimento) > 7);
+  else if (filterMode === 'criticos') lista = lista.filter(p => { const d = diasAte(p.vencimento); return d >= 0 && d <= 20; });
+  else if (filterMode === 'ok') lista = lista.filter(p => diasAte(p.vencimento) > 20);
 
   if (sortMode === 'validade') lista.sort((a,b) => a.vencimento.localeCompare(b.vencimento));
   else lista.sort((a,b) => a.nome.localeCompare(b.nome));
@@ -1041,8 +1073,8 @@ function getVisibleProdutos() {
 
 function updateSummary() {
   const vencidos = produtos.filter(p => diasAte(p.vencimento) < 0).length;
-  const criticos = produtos.filter(p => { const d = diasAte(p.vencimento); return d >= 0 && d <= 7; }).length;
-  const ok = produtos.filter(p => diasAte(p.vencimento) > 7).length;
+  const criticos = produtos.filter(p => { const d = diasAte(p.vencimento); return d >= 0 && d <= 20; }).length;
+  const ok = produtos.filter(p => diasAte(p.vencimento) > 20).length;
   document.getElementById('sumVencido').textContent = vencidos;
   document.getElementById('sumCritico').textContent = criticos;
   document.getElementById('sumOk').textContent = ok;
@@ -1086,7 +1118,7 @@ function renderLista() {
         </div>
         <button class="card-delete" onclick="deletar('${p.id}')">🗑</button>
       </div>
-      <div class="card-stats">
+      <div class="card-stats" style="grid-template-columns:1fr 1fr 80px;">
         <div class="stat-box">
           <div class="label">Validade</div>
           <div class="value">${formatarData(p.vencimento)}</div>
@@ -1094,6 +1126,19 @@ function renderLista() {
         <div class="stat-box">
           <div class="label">Faltam</div>
           ${diasLabel}
+        </div>
+        <div class="stat-box">
+          <div class="label">Qtd</div>
+          <input
+            type="number"
+            class="qty-input"
+            value="${p.quantidade !== null && p.quantidade !== undefined ? p.quantidade : ''}"
+            placeholder="—"
+            min="0"
+            inputmode="numeric"
+            onchange="atualizarQtd('${p.id}', this.value)"
+            onclick="event.stopPropagation()"
+          >
         </div>
       </div>
     </div>`;
@@ -1108,99 +1153,116 @@ function updateExportCount() {
   if (el) el.innerHTML = `<strong>${n} produto(s)</strong> selecionado(s).`;
 }
 
-// ===================== BUSCA EAN (Open Food Facts) =====================
+// ===================== BUSCA EAN =====================
 let eanTimer = null;
 
 function onEanInput(val) {
   clearTimeout(eanTimer);
   const clean = val.replace(/\D/g, '');
   const status = document.getElementById('eanStatus');
+  if (clean.length < 8) { status.style.display = 'none'; return; }
+  eanTimer = setTimeout(() => buscarProdutoEAN(clean), 700);
+}
 
-  if (clean.length < 8) {
-    status.style.display = 'none';
-    return;
-  }
-
-  // EAN completo (8 ou 13 dígitos) — busca imediata após pequeno delay
-  eanTimer = setTimeout(() => buscarProdutoEAN(clean), 600);
+function setStatus(status, tipo, msg) {
+  const estilos = {
+    loading: { bg: 'rgba(0,153,255,0.1)', color: 'var(--accent2)', border: '1px solid rgba(0,153,255,0.3)' },
+    ok:      { bg: 'rgba(0,229,160,0.1)', color: 'var(--accent)',  border: '1px solid rgba(0,229,160,0.3)' },
+    muted:   { bg: 'rgba(107,122,150,0.1)', color: 'var(--muted)', border: '1px solid var(--border)' },
+  };
+  const s = estilos[tipo] || estilos.muted;
+  status.style.display = 'block';
+  status.style.background = s.bg;
+  status.style.color = s.color;
+  status.style.border = s.border;
+  status.textContent = msg;
 }
 
 async function buscarProdutoEAN(ean) {
   const status = document.getElementById('eanStatus');
   const nomeInput = document.getElementById('nomeProduto');
 
-  status.style.display = 'block';
-  status.style.background = 'rgba(0,153,255,0.1)';
-  status.style.color = 'var(--accent2)';
-  status.style.border = '1px solid rgba(0,153,255,0.3)';
-  status.textContent = '🔍 Buscando produto...';
+  setStatus(status, 'loading', '🔍 Buscando produto...');
 
-  // Consulta as 3 bases em paralelo: alimentos, beleza/higiene e cosméticos
   const bases = [
-    { url: `https://world.openfoodfacts.org/api/v2/product/${ean}?fields=product_name,product_name_pt,brands`, label: 'Alimentos' },
-    { url: `https://world.openbeautyfacts.org/api/v2/product/${ean}?fields=product_name,product_name_pt,brands`, label: 'Higiene/Beleza' },
-    { url: `https://world.openproductsfacts.org/api/v2/product/${ean}?fields=product_name,product_name_pt,brands`, label: 'Produtos' },
+    {
+      label: 'Base BR/Global',
+      fn: async () => {
+        const r = await fetch(
+          `https://world.openfoodfacts.org/api/v2/product/${ean}?fields=product_name,product_name_pt,brands`,
+          { signal: AbortSignal.timeout(6000) }
+        );
+        const d = await r.json();
+        if (d.status === 1 && d.product) {
+          const nome = (d.product.product_name_pt || d.product.product_name || '').trim();
+          const marca = (d.product.brands || '').trim();
+          if (nome) return { nome, marca };
+        }
+        return null;
+      }
+    },
+    {
+      label: 'Higiene/Beleza',
+      fn: async () => {
+        const r = await fetch(
+          `https://world.openbeautyfacts.org/api/v2/product/${ean}?fields=product_name,product_name_pt,brands`,
+          { signal: AbortSignal.timeout(6000) }
+        );
+        const d = await r.json();
+        if (d.status === 1 && d.product) {
+          const nome = (d.product.product_name_pt || d.product.product_name || '').trim();
+          const marca = (d.product.brands || '').trim();
+          if (nome) return { nome, marca };
+        }
+        return null;
+      }
+    },
+    {
+      label: 'Catálogo Global',
+      fn: async () => {
+        const r = await fetch(
+          `https://api.upcitemdb.com/prod/trial/lookup?upc=${ean}`,
+          { signal: AbortSignal.timeout(6000) }
+        );
+        const d = await r.json();
+        if (d.code === 'OK' && d.items && d.items.length > 0) {
+          const item = d.items[0];
+          const nome = (item.title || '').trim();
+          const marca = (item.brand || '').trim();
+          if (nome) return { nome, marca };
+        }
+        return null;
+      }
+    },
   ];
 
-  try {
-    const resultados = await Promise.allSettled(
-      bases.map(b => fetch(b.url, { signal: AbortSignal.timeout(6000) }).then(r => r.json()))
-    );
+  const resultados = await Promise.allSettled(bases.map(b => b.fn()));
 
-    let nomeFinal = '';
-    let marcaFinal = '';
-    let fonteLabel = '';
-
-    for (let i = 0; i < resultados.length; i++) {
-      const r = resultados[i];
-      if (r.status === 'fulfilled' && r.value.status === 1 && r.value.product) {
-        const p = r.value.product;
-        const nome = (p.product_name_pt || p.product_name || '').trim();
-        if (nome) {
-          nomeFinal = nome;
-          marcaFinal = (p.brands || '').trim();
-          fonteLabel = bases[i].label;
-          break; // usa o primeiro que tiver nome
-        }
-      }
+  let encontrado = null;
+  let fonteLabel = '';
+  for (let i = 0; i < resultados.length; i++) {
+    const r = resultados[i];
+    if (r.status === 'fulfilled' && r.value) {
+      encontrado = r.value;
+      fonteLabel = bases[i].label;
+      break;
     }
+  }
 
-    if (nomeFinal) {
-      const nomeCompleto = marcaFinal ? `${nomeFinal} - ${marcaFinal}` : nomeFinal;
-      if (!nomeInput.value || nomeInput.dataset.fromApi === 'true') {
-        nomeInput.value = nomeCompleto;
-        nomeInput.dataset.fromApi = 'true';
-      }
-      status.style.background = 'rgba(0,229,160,0.1)';
-      status.style.color = 'var(--accent)';
-      status.style.border = '1px solid rgba(0,229,160,0.3)';
-      status.textContent = `✅ ${fonteLabel}: ${nomeCompleto}`;
-    } else {
-      // Verifica se ao menos um respondeu (produto existe mas sem nome)
-      const algumEncontrado = resultados.some(r =>
-        r.status === 'fulfilled' && r.value.status === 1 && r.value.product
-      );
-      if (algumEncontrado) {
-        status.style.background = 'rgba(255,107,53,0.1)';
-        status.style.color = 'var(--warn)';
-        status.style.border = '1px solid rgba(255,107,53,0.3)';
-        status.textContent = '⚠️ Produto encontrado mas sem nome. Preencha manualmente.';
-      } else {
-        status.style.background = 'rgba(107,122,150,0.1)';
-        status.style.color = 'var(--muted)';
-        status.style.border = '1px solid var(--border)';
-        status.textContent = '❓ Não encontrado nas bases. Preencha o nome manualmente.';
-      }
+  if (encontrado) {
+    const nomeCompleto = encontrado.marca
+      ? `${encontrado.nome} - ${encontrado.marca}`
+      : encontrado.nome;
+    if (!nomeInput.value || nomeInput.dataset.fromApi === 'true') {
+      nomeInput.value = nomeCompleto;
+      nomeInput.dataset.fromApi = 'true';
     }
-  } catch(e) {
-    status.style.background = 'rgba(107,122,150,0.1)';
-    status.style.color = 'var(--muted)';
-    status.style.border = '1px solid var(--border)';
-    status.textContent = '📵 Sem conexão para buscar. Preencha o nome manualmente.';
+    setStatus(status, 'ok', `✅ ${fonteLabel}: ${nomeCompleto}`);
+  } else {
+    setStatus(status, 'muted', '❓ Não encontrado nas bases. Preencha o nome manualmente.');
   }
 }
 
-// Limpa o flag ao editar o nome manualmente
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('nomeProduto').addEventListener('input', function() {
     this.dataset.fromApi = 'false';
@@ -1295,11 +1357,12 @@ function updateExportPreview() {
 }
 
 function gerarTextoTabela(lista) {
-  const linhas = ['COD | PRODUTO | VALIDADE | FALTAM', '─'.repeat(50)];
+  const linhas = ['COD | PRODUTO | VALIDADE | QTD | FALTAM', '─'.repeat(55)];
   lista.forEach(p => {
     const dias = diasAte(p.vencimento);
     const diasTxt = dias < 0 ? `VENCIDO (${Math.abs(dias)}d)` : dias === 0 ? 'HOJE' : `${dias} dias`;
-    linhas.push(`${p.ean} | ${p.nome} | ${formatarData(p.vencimento)} | ${diasTxt}`);
+    const qtdTxt = p.quantidade !== null && p.quantidade !== undefined ? p.quantidade : '—';
+    linhas.push(`${p.ean} | ${p.nome} | ${formatarData(p.vencimento)} | ${qtdTxt} | ${diasTxt}`);
   });
   return linhas.join('\n');
 }
@@ -1314,8 +1377,9 @@ function exportarExcel() {
       'COD (EAN)': p.ean,
       'Produto': p.nome,
       'Validade': formatarData(p.vencimento),
+      'Quantidade': p.quantidade !== null && p.quantidade !== undefined ? p.quantidade : '',
       'Faltam (dias)': dias < 0 ? `VENCIDO há ${Math.abs(dias)} dias` : dias === 0 ? 'VENCE HOJE' : dias,
-      'Status': dias < 0 ? 'VENCIDO' : dias <= 7 ? 'CRÍTICO' : 'OK'
+      'Status': dias < 0 ? 'VENCIDO' : dias <= 20 ? 'CRÍTICO' : 'OK'
     };
   });
 
@@ -1324,7 +1388,7 @@ function exportarExcel() {
 
   // Larguras de coluna
   ws['!cols'] = [
-    { wch: 16 }, { wch: 32 }, { wch: 14 }, { wch: 18 }, { wch: 10 }
+    { wch: 16 }, { wch: 32 }, { wch: 14 }, { wch: 10 }, { wch: 18 }, { wch: 10 }
   ];
 
   XLSX.utils.book_append_sheet(wb, ws, 'Validades');
@@ -1340,14 +1404,15 @@ function exportarWhatsApp() {
   if (sels.length === 0) { toast('Selecione ao menos um produto na Lista!', true); return; }
 
   const linhas = ['*📦 CONTROLE DE VALIDADES*', `_Data: ${new Date().toLocaleDateString('pt-BR')}_`, ''];
-  linhas.push('*COD EAN | PRODUTO | VALIDADE | FALTAM*');
+  linhas.push('*COD EAN | PRODUTO | VALIDADE | QTD | FALTAM*');
   linhas.push('━'.repeat(35));
 
   sels.forEach(p => {
     const dias = diasAte(p.vencimento);
-    const diasTxt = dias < 0 ? `⛔ VENCIDO (${Math.abs(dias)}d)` : dias === 0 ? '⚠️ HOJE' : dias <= 7 ? `🟠 ${dias}d` : `✅ ${dias}d`;
+    const diasTxt = dias < 0 ? `⛔ VENCIDO (${Math.abs(dias)}d)` : dias === 0 ? '⚠️ HOJE' : dias <= 20 ? `🟠 ${dias}d` : `✅ ${dias}d`;
     const ean = p.ean === '—' ? '—' : p.ean;
-    linhas.push(`${ean} | ${p.nome} | ${formatarData(p.vencimento)} | ${diasTxt}`);
+    const qtdTxtWa = p.quantidade !== null && p.quantidade !== undefined ? p.quantidade : '—';
+    linhas.push(`${ean} | ${p.nome} | ${formatarData(p.vencimento)} | ${qtdTxtWa} | ${diasTxt}`);
   });
 
   linhas.push('');
