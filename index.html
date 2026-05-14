@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Controle de Validade</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap');
 
@@ -471,6 +472,24 @@
   .stat-box .value.warn { color: var(--warn); }
   .stat-box .value.ok { color: var(--accent); }
 
+  .qty-input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    outline: none;
+    text-align: center;
+    -moz-appearance: textfield;
+  }
+  .qty-input::-webkit-outer-spin-button,
+  .qty-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .qty-input:focus { border-color: var(--accent2); }
+
   /* EMPTY STATE */
   .empty {
     text-align: center;
@@ -648,10 +667,16 @@
       <label>Código EAN</label>
       <div class="barcode-row">
         <div class="field" style="margin-bottom:0;">
-          <input type="text" id="codigoEAN" placeholder="7891234567890" inputmode="numeric" autocomplete="off">
+          <input type="text" id="codigoEAN" placeholder="7891234567890" inputmode="numeric" autocomplete="off" oninput="onEanInput(this.value)">
         </div>
         <button class="scan-btn" onclick="openCamera()" title="Escanear código de barras">📷</button>
       </div>
+      <div id="eanStatus" style="display:none; margin-top:6px; font-size:12px; padding:8px 10px; border-radius:8px;"></div>
+    </div>
+
+    <div class="field">
+      <label>Quantidade <span style="color:var(--muted);font-size:10px;">(opcional)</span></label>
+      <input type="number" id="qtdProduto" placeholder="Ex: 10" min="0" inputmode="numeric" autocomplete="off">
     </div>
   </div>
 
@@ -665,7 +690,13 @@
 
     <!-- Data fixa -->
     <div class="validity-section active" id="secData">
-      <div class="row3">
+      <!-- sub-toggle: dia completo vs só mês/ano -->
+      <div style="display:flex;gap:6px;margin-bottom:10px;">
+        <button class="tipo-btn active" id="btnDiaCompleto" onclick="setDataMode('completo')" style="font-size:11px;padding:7px 10px;">📅 Dia/Mês/Ano</button>
+        <button class="tipo-btn" id="btnMesAno" onclick="setDataMode('mesano')" style="font-size:11px;padding:7px 10px;">📆 Mês/Ano</button>
+      </div>
+      <!-- Dia + Mês + Ano -->
+      <div class="row3" id="modoCompleto">
         <div class="field">
           <label>Dia</label>
           <input type="number" id="vencDia" placeholder="DD" min="1" max="31" inputmode="numeric">
@@ -678,6 +709,20 @@
           <label>Ano</label>
           <input type="number" id="vencAno" placeholder="AAAA" min="2020" max="2099" inputmode="numeric">
         </div>
+      </div>
+      <!-- Só Mês + Ano (vence no último dia do mês) -->
+      <div class="row2" id="modoMesAno" style="display:none;">
+        <div class="field">
+          <label>Mês</label>
+          <input type="number" id="vencMesSo" placeholder="MM" min="1" max="12" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label>Ano</label>
+          <input type="number" id="vencAnoSo" placeholder="AAAA" min="2020" max="2099" inputmode="numeric">
+        </div>
+      </div>
+      <div id="previewMesAno" style="display:none; margin-top:6px; padding:8px 10px; background:var(--bg); border-radius:8px; font-size:12px; color:var(--accent);">
+        📅 Vence no último dia do mês selecionado
       </div>
     </div>
 
@@ -696,541 +741,4 @@
       <div class="row2">
         <div class="field">
           <label>Fabricação — Ano</label>
-          <input type="number" id="fabAno" placeholder="AAAA" min="2020" max="2099" inputmode="numeric">
-        </div>
-        <div class="field">
-          <label>Validade (meses)</label>
-          <input type="number" id="mesesVenc" placeholder="Ex: 12" min="1" max="120" inputmode="numeric">
-        </div>
-      </div>
-      <div id="previewVencimento" style="display:none; padding:10px; background:var(--bg); border-radius:8px; margin-top:4px; font-size:13px; color:var(--accent);"></div>
-    </div>
-  </div>
-
-  <button class="add-btn" onclick="adicionarProduto()">＋ Adicionar Produto</button>
-</div>
-
-<!-- ========== LISTA ========== -->
-<div class="section" id="tab-lista">
-
-  <div class="summary-bar" id="summaryBar">
-    <div class="sum-item danger"><div class="num" id="sumVencido">0</div><div class="lbl">Vencidos</div></div>
-    <div class="sum-item warn"><div class="num" id="sumCritico">0</div><div class="lbl">≤7 dias</div></div>
-    <div class="sum-item ok"><div class="num" id="sumOk">0</div><div class="lbl">Ok</div></div>
-  </div>
-
-  <div class="list-controls">
-    <input type="text" id="searchInput" placeholder="🔍 Buscar produto ou EAN..." oninput="renderLista()">
-  </div>
-
-  <div class="sort-row">
-    <button class="sort-chip active" onclick="setSort('validade')" id="sort-validade">↑ Validade</button>
-    <button class="sort-chip" onclick="setSort('nome')" id="sort-nome">A→Z Nome</button>
-    <button class="sort-chip active" onclick="setFilter('todos')" id="filter-todos">Todos</button>
-    <button class="sort-chip" onclick="setFilter('vencidos')" id="filter-vencidos">🔴 Vencidos</button>
-    <button class="sort-chip" onclick="setFilter('criticos')" id="filter-criticos">🟠 ≤7 dias</button>
-    <button class="sort-chip" onclick="setFilter('ok')" id="filter-ok">🟢 Ok</button>
-  </div>
-
-  <div class="select-all-row">
-    <input type="checkbox" id="checkAll" onchange="toggleAll(this)" style="width:18px;height:18px;cursor:pointer;accent-color:var(--accent);">
-    <span>Selecionar todos visíveis</span>
-    <span class="sel-count" id="selCount">0 selecionados</span>
-  </div>
-
-  <div id="productList"></div>
-</div>
-
-<!-- ========== EXPORTAR ========== -->
-<div class="section" id="tab-exportar">
-  <div class="export-card">
-    <h3>📤 Exportar Selecionados</h3>
-    <div class="export-info">
-      Vá até a <strong>Lista</strong>, marque os produtos desejados com ✓ e volte aqui para exportar.<br>
-      <strong id="exportSelCount">0 produto(s)</strong> selecionado(s).
-    </div>
-
-    <div class="export-btns">
-      <button class="exp-btn excel" onclick="exportarExcel()">
-        <div class="icon">📊</div>
-        <div class="desc">
-          <strong>Exportar Excel (.xlsx)</strong>
-          <small>Planilha com COD | Produto | Validade | Faltam</small>
-        </div>
-      </button>
-
-      <button class="exp-btn whatsapp" onclick="exportarWhatsApp()">
-        <div class="icon">💬</div>
-        <div class="desc">
-          <strong>Enviar pelo WhatsApp</strong>
-          <small>Tabela formatada em texto para mensagem</small>
-        </div>
-      </button>
-
-      <button class="exp-btn" style="border-color:var(--border);" onclick="exportarTexto()">
-        <div class="icon" style="background:rgba(107,122,150,0.15);">📄</div>
-        <div class="desc">
-          <strong>Copiar como Texto</strong>
-          <small>Copia lista formatada para área de transferência</small>
-        </div>
-      </button>
-    </div>
-  </div>
-
-  <div class="export-card" style="border-color:var(--border);">
-    <h3 style="color:var(--muted);font-size:12px;">⚙️ Prévia da exportação</h3>
-    <pre id="exportPreview" style="font-size:11px; color:var(--muted); white-space:pre-wrap; line-height:1.6; max-height:200px; overflow-y:auto;"></pre>
-  </div>
-</div>
-
-<!-- CAMERA MODAL -->
-<div class="modal-overlay" id="cameraModal">
-  <div class="camera-wrap">
-    <video id="video" autoplay playsinline muted></video>
-    <div class="scan-frame"><div class="scan-line"></div></div>
-  </div>
-  <p class="scan-hint">
-    Posicione o código de barras no centro do quadro
-    <small>Aproxime a câmera até o código ficar nítido</small>
-  </p>
-  <div class="modal-actions">
-    <button class="modal-btn cancel" onclick="closeCamera()">✕ Cancelar</button>
-    <button class="modal-btn manual" onclick="digitarManual()">✏️ Digitar EAN</button>
-  </div>
-</div>
-
-<div class="toast" id="toast"></div>
-
-<script>
-// ===================== STATE =====================
-let produtos = JSON.parse(localStorage.getItem('validades_produtos') || '[]');
-let tipoValidade = 'data';
-let sortMode = 'validade';
-let filterMode = 'todos';
-let videoStream = null;
-let scanInterval = null;
-
-// ===================== UTILS =====================
-function salvar() {
-  localStorage.setItem('validades_produtos', JSON.stringify(produtos));
-  renderLista();
-  updateSummary();
-  updateExportCount();
-  document.getElementById('totalCount').textContent = produtos.length;
-}
-
-function toast(msg, err = false) {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.className = 'toast show' + (err ? ' error' : '');
-  setTimeout(() => el.className = 'toast', 2500);
-}
-
-function diasAte(dateStr) {
-  const hoje = new Date(); hoje.setHours(0,0,0,0);
-  const venc = new Date(dateStr); venc.setHours(0,0,0,0);
-  return Math.round((venc - hoje) / 86400000);
-}
-
-function formatarData(dateStr) {
-  const [y,m,d] = dateStr.split('-');
-  return `${d}/${m}/${y}`;
-}
-
-function statusClass(dias) {
-  if (dias < 0) return 'vencido';
-  if (dias <= 7) return 'critico';
-  return 'ok';
-}
-
-function statusColor(dias) {
-  if (dias < 0) return 'danger';
-  if (dias <= 7) return 'warn';
-  return 'ok';
-}
-
-function gerarId() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
-}
-
-// ===================== TABS =====================
-function showTab(tab) {
-  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.getElementById('tab-' + tab).classList.add('active');
-  event.currentTarget.classList.add('active');
-  if (tab === 'exportar') updateExportPreview();
-}
-
-// ===================== TIPO VALIDADE =====================
-function setTipo(tipo) {
-  tipoValidade = tipo;
-  document.getElementById('btnTipoData').classList.toggle('active', tipo === 'data');
-  document.getElementById('btnTipoFab').classList.toggle('active', tipo === 'fabricacao');
-  document.getElementById('secData').classList.toggle('active', tipo === 'data');
-  document.getElementById('secFab').classList.toggle('active', tipo === 'fabricacao');
-}
-
-// Preview vencimento a partir da fabricação
-['fabDia','fabMes','fabAno','mesesVenc'].forEach(id => {
-  document.getElementById(id).addEventListener('input', () => {
-    const d = parseInt(document.getElementById('fabDia').value);
-    const m = parseInt(document.getElementById('fabMes').value);
-    const a = parseInt(document.getElementById('fabAno').value);
-    const meses = parseInt(document.getElementById('mesesVenc').value);
-    const prev = document.getElementById('previewVencimento');
-    if (d && m && a && meses) {
-      const fab = new Date(a, m-1, d);
-      fab.setMonth(fab.getMonth() + meses);
-      prev.style.display = 'block';
-      prev.textContent = `📅 Vencimento calculado: ${String(fab.getDate()).padStart(2,'0')}/${String(fab.getMonth()+1).padStart(2,'0')}/${fab.getFullYear()}`;
-    } else {
-      prev.style.display = 'none';
-    }
-  });
-});
-
-// ===================== ADICIONAR =====================
-function adicionarProduto() {
-  const nome = document.getElementById('nomeProduto').value.trim();
-  const ean = document.getElementById('codigoEAN').value.trim();
-
-  if (!nome) { toast('Informe o nome do produto!', true); return; }
-
-  let vencimento = null;
-
-  if (tipoValidade === 'data') {
-    const d = parseInt(document.getElementById('vencDia').value);
-    const m = parseInt(document.getElementById('vencMes').value);
-    const a = parseInt(document.getElementById('vencAno').value);
-    if (!d || !m || !a) { toast('Informe a data de vencimento completa!', true); return; }
-    if (m < 1 || m > 12) { toast('Mês inválido!', true); return; }
-    if (d < 1 || d > 31) { toast('Dia inválido!', true); return; }
-    vencimento = `${a}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-  } else {
-    const fd = parseInt(document.getElementById('fabDia').value);
-    const fm = parseInt(document.getElementById('fabMes').value);
-    const fa = parseInt(document.getElementById('fabAno').value);
-    const meses = parseInt(document.getElementById('mesesVenc').value);
-    if (!fd || !fm || !fa || !meses) { toast('Preencha fabricação e validade em meses!', true); return; }
-    const fab = new Date(fa, fm-1, fd);
-    fab.setMonth(fab.getMonth() + meses);
-    vencimento = fab.toISOString().split('T')[0];
-  }
-
-  produtos.push({
-    id: gerarId(),
-    nome,
-    ean: ean || '—',
-    vencimento,
-    selecionado: false
-  });
-
-  // Limpar
-  ['nomeProduto','codigoEAN','vencDia','vencMes','vencAno','fabDia','fabMes','fabAno','mesesVenc'].forEach(id => {
-    document.getElementById(id).value = '';
-  });
-  document.getElementById('previewVencimento').style.display = 'none';
-
-  salvar();
-  toast('✅ Produto adicionado!');
-}
-
-// ===================== LISTA =====================
-function setSort(mode) {
-  sortMode = mode;
-  document.querySelectorAll('[id^="sort-"]').forEach(el => el.classList.remove('active'));
-  document.getElementById('sort-' + mode).classList.add('active');
-  renderLista();
-}
-
-function setFilter(mode) {
-  filterMode = mode;
-  document.querySelectorAll('[id^="filter-"]').forEach(el => el.classList.remove('active'));
-  document.getElementById('filter-' + mode).classList.add('active');
-  renderLista();
-}
-
-function toggleAll(cb) {
-  const visibleIds = getVisibleProdutos().map(p => p.id);
-  visibleIds.forEach(id => {
-    const p = produtos.find(x => x.id === id);
-    if (p) p.selecionado = cb.checked;
-  });
-  salvar();
-}
-
-function toggleSelect(id) {
-  const p = produtos.find(x => x.id === id);
-  if (p) { p.selecionado = !p.selecionado; salvar(); }
-}
-
-function deletar(id) {
-  if (!confirm('Remover este produto?')) return;
-  produtos = produtos.filter(p => p.id !== id);
-  salvar();
-  toast('🗑️ Produto removido');
-}
-
-function getVisibleProdutos() {
-  const q = document.getElementById('searchInput').value.toLowerCase();
-  let lista = [...produtos];
-
-  if (q) {
-    lista = lista.filter(p =>
-      p.nome.toLowerCase().includes(q) || p.ean.toLowerCase().includes(q)
-    );
-  }
-
-  if (filterMode === 'vencidos') lista = lista.filter(p => diasAte(p.vencimento) < 0);
-  else if (filterMode === 'criticos') lista = lista.filter(p => { const d = diasAte(p.vencimento); return d >= 0 && d <= 7; });
-  else if (filterMode === 'ok') lista = lista.filter(p => diasAte(p.vencimento) > 7);
-
-  if (sortMode === 'validade') lista.sort((a,b) => a.vencimento.localeCompare(b.vencimento));
-  else lista.sort((a,b) => a.nome.localeCompare(b.nome));
-
-  return lista;
-}
-
-function updateSummary() {
-  const vencidos = produtos.filter(p => diasAte(p.vencimento) < 0).length;
-  const criticos = produtos.filter(p => { const d = diasAte(p.vencimento); return d >= 0 && d <= 7; }).length;
-  const ok = produtos.filter(p => diasAte(p.vencimento) > 7).length;
-  document.getElementById('sumVencido').textContent = vencidos;
-  document.getElementById('sumCritico').textContent = criticos;
-  document.getElementById('sumOk').textContent = ok;
-}
-
-function renderLista() {
-  const lista = getVisibleProdutos();
-  const sel = produtos.filter(p => p.selecionado).length;
-  document.getElementById('selCount').textContent = sel + ' selecionados';
-  document.getElementById('checkAll').checked = lista.length > 0 && lista.every(p => p.selecionado);
-
-  const container = document.getElementById('productList');
-
-  if (lista.length === 0) {
-    container.innerHTML = `
-      <div class="empty">
-        <span class="emoji">📭</span>
-        <p>Nenhum produto encontrado</p>
-        <small>Cadastre produtos ou ajuste o filtro</small>
-      </div>`;
-    return;
-  }
-
-  container.innerHTML = lista.map(p => {
-    const dias = diasAte(p.vencimento);
-    const cls = statusClass(dias);
-    const cor = statusColor(dias);
-    const diasLabel = dias < 0
-      ? `<span class="value danger">VENCIDO há ${Math.abs(dias)}d</span>`
-      : dias === 0
-        ? `<span class="value danger">VENCE HOJE</span>`
-        : `<span class="value ${cor}">${dias} dias</span>`;
-
-    return `
-    <div class="product-card ${cls} ${p.selecionado ? 'selected' : ''}">
-      <div class="card-header">
-        <div class="card-check" onclick="toggleSelect('${p.id}')"></div>
-        <div class="card-info">
-          <div class="card-name">${p.nome}</div>
-          <div class="card-ean">EAN: ${p.ean}</div>
-        </div>
-        <button class="card-delete" onclick="deletar('${p.id}')">🗑</button>
-      </div>
-      <div class="card-stats">
-        <div class="stat-box">
-          <div class="label">Validade</div>
-          <div class="value">${formatarData(p.vencimento)}</div>
-        </div>
-        <div class="stat-box">
-          <div class="label">Faltam</div>
-          ${diasLabel}
-        </div>
-      </div>
-    </div>`;
-  }).join('');
-
-  updateExportCount();
-}
-
-function updateExportCount() {
-  const n = produtos.filter(p => p.selecionado).length;
-  const el = document.getElementById('exportSelCount');
-  if (el) el.innerHTML = `<strong>${n} produto(s)</strong> selecionado(s).`;
-}
-
-// ===================== CÂMERA =====================
-async function openCamera() {
-  const modal = document.getElementById('cameraModal');
-  modal.classList.add('open');
-
-  try {
-    videoStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-    });
-    const video = document.getElementById('video');
-    video.srcObject = videoStream;
-
-    // Tenta usar BarcodeDetector se disponível
-    if ('BarcodeDetector' in window) {
-      const detector = new BarcodeDetector({ formats: ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code'] });
-      scanInterval = setInterval(async () => {
-        try {
-          if (video.readyState === video.HAVE_ENOUGH_DATA) {
-            const barcodes = await detector.detect(video);
-            if (barcodes.length > 0) {
-              const code = barcodes[0].rawValue;
-              handleScannedCode(code);
-            }
-          }
-        } catch(e) {}
-      }, 300);
-    }
-  } catch(e) {
-    toast('Câmera não disponível. Use a digitação manual.', true);
-    closeCamera();
-  }
-}
-
-function handleScannedCode(code) {
-  document.getElementById('codigoEAN').value = code;
-  closeCamera();
-  toast('📷 Código lido: ' + code);
-}
-
-function closeCamera() {
-  if (scanInterval) { clearInterval(scanInterval); scanInterval = null; }
-  if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
-  document.getElementById('cameraModal').classList.remove('open');
-  document.getElementById('video').srcObject = null;
-}
-
-function digitarManual() {
-  closeCamera();
-  setTimeout(() => {
-    const ean = prompt('Digite o código EAN:');
-    if (ean) {
-      document.getElementById('codigoEAN').value = ean.trim();
-      toast('EAN inserido manualmente');
-    }
-  }, 300);
-}
-
-// ===================== EXPORT =====================
-function getSelecionados() {
-  return produtos.filter(p => p.selecionado);
-}
-
-function updateExportPreview() {
-  const sels = getSelecionados();
-  const prev = document.getElementById('exportPreview');
-  if (sels.length === 0) {
-    prev.textContent = 'Nenhum produto selecionado.';
-    return;
-  }
-  prev.textContent = gerarTextoTabela(sels);
-  updateExportCount();
-}
-
-function gerarTextoTabela(lista) {
-  const linhas = ['COD | PRODUTO | VALIDADE | FALTAM', '─'.repeat(50)];
-  lista.forEach(p => {
-    const dias = diasAte(p.vencimento);
-    const diasTxt = dias < 0 ? `VENCIDO (${Math.abs(dias)}d)` : dias === 0 ? 'HOJE' : `${dias} dias`;
-    linhas.push(`${p.ean} | ${p.nome} | ${formatarData(p.vencimento)} | ${diasTxt}`);
-  });
-  return linhas.join('\n');
-}
-
-function exportarExcel() {
-  const sels = getSelecionados();
-  if (sels.length === 0) { toast('Selecione ao menos um produto na Lista!', true); return; }
-
-  const data = sels.map(p => {
-    const dias = diasAte(p.vencimento);
-    return {
-      'COD (EAN)': p.ean,
-      'Produto': p.nome,
-      'Validade': formatarData(p.vencimento),
-      'Faltam (dias)': dias < 0 ? `VENCIDO há ${Math.abs(dias)} dias` : dias === 0 ? 'VENCE HOJE' : dias,
-      'Status': dias < 0 ? 'VENCIDO' : dias <= 7 ? 'CRÍTICO' : 'OK'
-    };
-  });
-
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(data);
-
-  // Larguras de coluna
-  ws['!cols'] = [
-    { wch: 16 }, { wch: 32 }, { wch: 14 }, { wch: 18 }, { wch: 10 }
-  ];
-
-  XLSX.utils.book_append_sheet(wb, ws, 'Validades');
-
-  const now = new Date();
-  const filename = `validades_${now.toISOString().slice(0,10)}.xlsx`;
-  XLSX.writeFile(wb, filename);
-  toast('📊 Excel exportado!');
-}
-
-function exportarWhatsApp() {
-  const sels = getSelecionados();
-  if (sels.length === 0) { toast('Selecione ao menos um produto na Lista!', true); return; }
-
-  const linhas = ['*📦 CONTROLE DE VALIDADES*', `_Data: ${new Date().toLocaleDateString('pt-BR')}_`, ''];
-  linhas.push('*COD EAN | PRODUTO | VALIDADE | FALTAM*');
-  linhas.push('━'.repeat(35));
-
-  sels.forEach(p => {
-    const dias = diasAte(p.vencimento);
-    const diasTxt = dias < 0 ? `⛔ VENCIDO (${Math.abs(dias)}d)` : dias === 0 ? '⚠️ HOJE' : dias <= 7 ? `🟠 ${dias}d` : `✅ ${dias}d`;
-    const ean = p.ean === '—' ? '—' : p.ean;
-    linhas.push(`${ean} | ${p.nome} | ${formatarData(p.vencimento)} | ${diasTxt}`);
-  });
-
-  linhas.push('');
-  linhas.push(`_Total: ${sels.length} produto(s)_`);
-
-  const texto = encodeURIComponent(linhas.join('\n'));
-  window.open(`https://wa.me/?text=${texto}`, '_blank');
-}
-
-function exportarTexto() {
-  const sels = getSelecionados();
-  if (sels.length === 0) { toast('Selecione ao menos um produto na Lista!', true); return; }
-
-  const texto = gerarTextoTabela(sels);
-
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(texto).then(() => toast('📋 Texto copiado!')).catch(() => fallbackCopy(texto));
-  } else {
-    fallbackCopy(texto);
-  }
-}
-
-function fallbackCopy(texto) {
-  const ta = document.createElement('textarea');
-  ta.value = texto;
-  document.body.appendChild(ta);
-  ta.select();
-  document.execCommand('copy');
-  document.body.removeChild(ta);
-  toast('📋 Texto copiado!');
-}
-
-// ===================== INIT =====================
-document.addEventListener('DOMContentLoaded', () => {
-  updateSummary();
-  renderLista();
-  document.getElementById('totalCount').textContent = produtos.length;
-});
-
-// Fechar câmera ao apertar voltar
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeCamera();
-});
-</script>
-</body>
-</html>
+          <input typ
