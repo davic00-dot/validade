@@ -648,9 +648,9 @@
 </div>
 
 <div class="tabs">
-  <button class="tab active" onclick="showTab('cadastro')">➕ Cadastrar</button>
-  <button class="tab" onclick="showTab('lista')">📋 Lista</button>
-  <button class="tab" onclick="showTab('exportar')">📤 Exportar</button>
+  <button class="tab active" onclick="showTab('cadastro', this)">➕ Cadastrar</button>
+  <button class="tab" onclick="showTab('lista', this)">📋 Lista</button>
+  <button class="tab" onclick="showTab('exportar', this)">📤 Exportar</button>
 </div>
 
 <!-- ========== CADASTRAR ========== -->
@@ -691,12 +691,10 @@
 
     <!-- Data fixa -->
     <div class="validity-section active" id="secData">
-      <!-- sub-toggle: dia completo vs só mês/ano -->
       <div style="display:flex;gap:6px;margin-bottom:10px;">
         <button class="tipo-btn active" id="btnDiaCompleto" onclick="setDataMode('completo')" style="font-size:11px;padding:7px 10px;">📅 Dia/Mês/Ano</button>
         <button class="tipo-btn" id="btnMesAno" onclick="setDataMode('mesano')" style="font-size:11px;padding:7px 10px;">📆 Mês/Ano</button>
       </div>
-      <!-- Dia + Mês + Ano -->
       <div class="row3" id="modoCompleto">
         <div class="field">
           <label>Dia</label>
@@ -711,7 +709,6 @@
           <input type="number" id="vencAno" placeholder="AAAA" min="2020" max="2099" inputmode="numeric">
         </div>
       </div>
-      <!-- Só Mês + Ano (vence no último dia do mês) -->
       <div class="row2" id="modoMesAno" style="display:none;">
         <div class="field">
           <label>Mês</label>
@@ -741,3 +738,5 @@
       </div>
       <div class="row2">
         <div class="field">
+          <label>Fabricação — Ano</label>
+          <input type="number" id="fabAno" placeholder="AAAA" min="2020" max="2099
